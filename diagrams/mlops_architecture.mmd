@@ -1,0 +1,58 @@
+graph TB
+    subgraph "MLOps Model Deployment Platform"
+        subgraph "Development"
+            CODE[Code &<br/>Experiments]
+            TRAIN[Model<br/>Training]
+            VALIDATE[Model<br/>Validation]
+        end
+        
+        subgraph "Model Registry"
+            REGISTER[Register<br/>Model]
+            VERSION[Version<br/>Control]
+            METADATA[Metadata &<br/>Metrics]
+        end
+        
+        subgraph "Deployment"
+            STAGING[Staging<br/>Environment]
+            CANARY[Canary<br/>Deployment]
+            PROD[Production<br/>Environment]
+        end
+        
+        subgraph "Serving"
+            API[Prediction<br/>API]
+            BATCH[Batch<br/>Inference]
+            STREAM[Stream<br/>Processing]
+        end
+        
+        subgraph "Monitoring"
+            METRICS[Performance<br/>Metrics]
+            DRIFT[Model<br/>Drift Detection]
+            ALERTS[Alerting]
+        end
+    end
+    
+    CODE --> TRAIN
+    TRAIN --> VALIDATE
+    VALIDATE --> REGISTER
+    REGISTER --> VERSION
+    VERSION --> METADATA
+    
+    METADATA --> STAGING
+    STAGING --> CANARY
+    CANARY --> PROD
+    
+    PROD --> API
+    PROD --> BATCH
+    PROD --> STREAM
+    
+    API --> METRICS
+    BATCH --> METRICS
+    STREAM --> METRICS
+    
+    METRICS --> DRIFT
+    DRIFT --> ALERTS
+    
+    style REGISTER fill:#9C27B0
+    style PROD fill:#4CAF50
+    style API fill:#2196F3
+    style METRICS fill:#FF9800
