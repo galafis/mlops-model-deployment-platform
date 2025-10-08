@@ -28,13 +28,7 @@ O principal objetivo deste projeto é **fornecer um guia detalhado e exemplos de
 - **Testes Incluídos**: Módulos de código validados através de testes unitários e de integração, garantindo a robustez e a confiabilidade das soluções.
 - **Abordagem Didática**: Conteúdo apresentado de forma didática, ideal para aprendizado e referência, com explicações claras sobre os conceitos e a aplicação prática.
 
-### 📊 Visualização
 
-![Arquitetura MLOps](images/mlops_model_deployment_platform.png)
-
-*Diagrama ilustrativo da arquitetura da plataforma MLOps, destacando os principais componentes e o fluxo de trabalho.*
-
----
 
 ## 🇬🇧 MLOps Model Deployment Platform
 

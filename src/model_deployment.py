@@ -108,7 +108,7 @@ class ModelRegistry:
         if model_name in self.models and self.models[model_name]:
             return self.models[model_name][-1]
         return None
-    
+
     def get_production_model(self, model_name: str) -> Optional[Model]:
         """Retorna o modelo em produção"""
         if model_name in self.models:
@@ -148,6 +148,32 @@ class DeploymentPlatform:
         print(f"✓ Modelo deployed com estratégia {config.strategy.value}")
         print(f"  Endpoint: {model.endpoint}")
         return True
+
+    def predict(self, model_name: str, model_version: str, input_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Realiza uma previsão usando um modelo implantado."""
+        deployment_id = f"{model_name}-{model_version}"
+        if deployment_id not in self.deployments:
+            print(f"✗ Erro: Modelo {model_name} v{model_version} não encontrado ou não implantado.")
+            return None
+
+    def list_models(self) -> List[ModelMetadata]:
+        """Lista todos os modelos registrados na plataforma."""
+        all_models = []
+        for model_name in self.registry.models:
+            for model in self.registry.models[model_name]:
+                all_models.append(model.metadata)
+        return all_models
+
+    def list_deployments(self) -> List[str]:
+        """Lista todos os IDs de deployments ativos."""
+        return list(self.deployments.keys())
+
+        # Simulação de previsão
+        # Em um cenário real, aqui haveria a chamada ao modelo implantado
+        print(f"Simulando previsão para modelo {model_name} v{model_version} com entrada: {input_data}")
+        if "transaction_amount" in input_data and input_data["transaction_amount"] > 500:
+            return {"is_fraud": True, "score": 0.95}
+        return {"is_fraud": False, "score": 0.15}
     
     def get_deployment_info(self, model_name: str) -> Optional[Dict[str, Any]]:
         """Retorna informações do deployment"""
@@ -160,6 +186,18 @@ class DeploymentPlatform:
                     "deployed_at": dep_info["deployed_at"].isoformat()
                 }
         return None
+
+    def list_models(self) -> List[ModelMetadata]:
+        """Lista todos os modelos registrados na plataforma."""
+        all_models = []
+        for model_name in self.registry.models:
+            for model in self.registry.models[model_name]:
+                all_models.append(model.metadata)
+        return all_models
+
+    def list_deployments(self) -> List[str]:
+        """Lista todos os IDs de deployments ativos."""
+        return list(self.deployments.keys())
 
 
 def example_usage():
