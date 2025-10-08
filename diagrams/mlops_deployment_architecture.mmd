@@ -1,0 +1,23 @@
+graph TD
+    subgraph MLOps Model Deployment Platform
+        A[Model Training] --> B(Model Registry)
+        B --> C{Model Versioning}
+        C --> D[Deployment Platform]
+        D --> E{Deployment Strategies}
+        E --> F[Model Serving API]
+        F --> G[Online Inference]
+        D --> H[Monitoring & Observability]
+        H --> I[Feedback Loop]
+        I --> A
+    end
+
+    style A fill:#f9f,stroke:#333,stroke-width:2px
+    style B fill:#bbf,stroke:#333,stroke-width:2px
+    style C fill:#ccf,stroke:#333,stroke-width:2px
+    style D fill:#afa,stroke:#333,stroke-width:2px
+    style E fill:#ffc,stroke:#333,stroke-width:2px
+    style F fill:#afa,stroke:#333,stroke-width:2px
+    style G fill:#f9f,stroke:#333,stroke-width:2px
+    style H fill:#bbf,stroke:#333,stroke-width:2px
+    style I fill:#ccf,stroke:#333,stroke-width:2px
+
