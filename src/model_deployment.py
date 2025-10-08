@@ -84,6 +84,7 @@ class DeploymentConfig:
     min_replicas: int = 1
     max_replicas: int = 10
     target_cpu_utilization: int = 70
+    canary_traffic_percentage: Optional[int] = None # Para estratégia Canary
 
     def to_dict(self):
         return {
@@ -94,12 +95,14 @@ class DeploymentConfig:
             "auto_scaling": self.auto_scaling,
             "min_replicas": self.min_replicas,
             "max_replicas": self.max_replicas,
-            "target_cpu_utilization": self.target_cpu_utilization
+            "target_cpu_utilization": self.target_cpu_utilization,
+            "canary_traffic_percentage": self.canary_traffic_percentage
         }
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]):
         data["strategy"] = DeploymentStrategy(data["strategy"])
+        data.setdefault("canary_traffic_percentage", None)
         return cls(**data)
 
 
@@ -121,8 +124,13 @@ class Model:
         """
         if model_path and os.path.exists(model_path):
             print(f"[INFO] Carregando modelo de: {model_path}")
-            # Exemplo: return pickle.load(open(model_path, 'rb'))
-            return f"MockModelInstance({model_path})"
+            try:
+                import pickle
+                with open(model_path, 'rb') as f:
+                    return pickle.load(f)
+            except Exception as e:
+                print(f"[ERROR] Erro ao carregar o modelo de {model_path}: {e}")
+                return "MockModelInstance"
         print("[INFO] Nenhum caminho de modelo fornecido ou arquivo não encontrado. Usando mock.")
         return "MockModelInstance"
 
@@ -169,7 +177,7 @@ class Model:
             "version": self.metadata.version
         })
 
-    def predict(self, input_data: Dict[str, Any]) -> Dict[str, Any]:
+    def predict(self, input_data: Any) -> Dict[str, Any]:
         """
         Realiza uma previsão do modelo com base nos dados de entrada.
         Utiliza a instância do modelo carregada.
@@ -177,15 +185,32 @@ class Model:
         if self._model_instance == "MockModelInstance":
             # Lógica de simulação simples para o mock
             print(f"  Simulando previsão para modelo {self.metadata.name} v{self.metadata.version} com input: {input_data}")
-            if "feature_1" in input_data and input_data["feature_1"] > 0.5:
-                return {"prediction": 1, "probability": 0.85, "model_version": self.metadata.version}
-            else:
-                return {"prediction": 0, "probability": 0.15, "model_version": self.metadata.version}
+            # Assume que input_data é um dicionário com uma chave 'features' contendo uma lista de listas
+            if isinstance(input_data, dict) and "features" in input_data and input_data["features"]:
+                # Apenas para simulação, verifica o primeiro elemento da primeira feature
+                if input_data["features"][0][0] > 0.5:
+                    return {"prediction": 1, "probability": 0.85, "model_version": self.metadata.version}
+                else:
+                    return {"prediction": 0, "probability": 0.15, "model_version": self.metadata.version}
+            return {"prediction": 0, "probability": 0.5, "model_version": self.metadata.version, "note": "Mock prediction for unexpected input format"}
         else:
             # Em um cenário real, aqui seria a chamada ao modelo carregado
             # Ex: return self._model_instance.predict(input_data)
-            print(f"[INFO] Realizando previsão com modelo real {self._model_instance} para input: {input_data}")
-            return {"prediction": "real_prediction", "confidence": 0.95, "model_version": self.metadata.version}
+            # Para o exemplo avançado, esperamos um array ou lista de features
+            if isinstance(input_data, dict) and "features" in input_data:
+                try:
+                    import numpy as np
+                    # Converte a lista de listas para um array numpy
+                    features_array = np.array(input_data["features"])
+                    prediction = self._model_instance.predict(features_array).tolist()
+                    if hasattr(self._model_instance, 'predict_proba'):
+                        prediction_proba = self._model_instance.predict_proba(features_array).tolist()
+                        return {"prediction": prediction, "probabilities": prediction_proba, "model_version": self.metadata.version}
+                    else:
+                        return {"prediction": prediction, "model_version": self.metadata.version}
+                except Exception as e:
+                    return {"error": f"Erro ao usar modelo real para previsão: {e}", "model_version": self.metadata.version}
+            return {"error": "Formato de entrada inesperado para modelo real", "model_version": self.metadata.version}
 
 
 class ModelRegistry:
@@ -211,6 +236,9 @@ class ModelRegistry:
                         model.status = ModelStatus(version_data["status"])
                         model.endpoint = version_data["endpoint"]
                         model.deployment_history = version_data["deployment_history"]
+                        # O _model_instance é carregado no __init__ do Model, mas precisamos garantir que o caminho esteja correto
+                        # e que ele seja recarregado se o arquivo existir.
+                        model._model_instance = model._load_model_instance(metadata.model_path)
                         loaded_models[model_name].append(model)
                 return loaded_models
         return {}
@@ -242,13 +270,13 @@ class ModelRegistry:
         
         # Verificar se a versão já existe
         if any(m.metadata.version == model.metadata.version for m in self.models[model.metadata.name]):
-            print(f"⚠ Modelo \'{model.metadata.name}\' v{model.metadata.version} já registrado. Use update_model para modificar.")
+            print(f"⚠ Modelo '{model.metadata.name}' v{model.metadata.version} já registrado. Use update_model para modificar.")
             return False
 
         self.models[model.metadata.name].append(model)
         self.models[model.metadata.name].sort(key=lambda m: m.metadata.created_at) # Manter ordenado por criação
         self._save_registry()
-        print(f"✓ Modelo \'{model.metadata.name}\' v{model.metadata.version} registrado com sucesso.")
+        print(f"✓ Modelo '{model.metadata.name}' v{model.metadata.version} registrado com sucesso.")
         return True
     
     def get_model(self, model_name: str, version: Optional[str] = None) -> Optional[Model]:
@@ -315,6 +343,8 @@ class DeploymentPlatform:
                 for dep_id, dep_data in data.items():
                     model = self.registry.get_model(dep_data["model_name"], dep_data["model_version"])
                     if model:
+                        # Garante que o _model_instance seja carregado no modelo recuperado do registro
+                        model._model_instance = model._load_model_instance(model.metadata.model_path)
                         config = DeploymentConfig.from_dict(dep_data["config"])
                         loaded_deployments[dep_id] = {
                             "model": model,
@@ -324,7 +354,7 @@ class DeploymentPlatform:
                             "status": dep_data["status"]
                         }
                     else:
-                        print(f"[WARN] Modelo {dep_data["model_name"]} v{dep_data["model_version"]} não encontrado no registro para deployment {dep_id}.")
+                        print(f"[WARN] Modelo {dep_data['model_name']} v{dep_data['model_version']} não encontrado no registro para deployment {dep_id}.")
                 return loaded_deployments
         return {}
 
@@ -361,236 +391,126 @@ class DeploymentPlatform:
             return None
 
         deployment_id = f"{model.metadata.name}-{model.metadata.version}"
-        
-        # Simular diferentes estratégias de deployment
-        print(f"[INFO] Iniciando deployment para {deployment_id} com estratégia {config.strategy.value}...")
-        if config.strategy == DeploymentStrategy.BLUE_GREEN:
-            print("  Implementando Blue/Green: Preparando nova infraestrutura...")
-            time.sleep(1) # Simula tempo de provisionamento
-            print("  Trocando tráfego para a nova versão (Green)...")
-        elif config.strategy == DeploymentStrategy.CANARY:
-            print("  Implementando Canary: Redirecionando pequena porcentagem de tráfego...")
-            time.sleep(0.5)
-            print("  Monitorando performance da versão Canary...")
-        elif config.strategy == DeploymentStrategy.ROLLING:
-            print("  Implementando Rolling Update: Atualizando instâncias gradualmente...")
-            time.sleep(0.5)
-        elif config.strategy == DeploymentStrategy.SHADOW:
-            print("  Implementando Shadow: Enviando tráfego para nova versão sem afetar usuários...")
-            time.sleep(0.5)
+        if deployment_id in self.deployments:
+            print(f"✗ Erro: Modelo {model.metadata.name} v{model.metadata.version} já possui um deployment ativo.")
+            return None
 
-        endpoint = f"https://api.ml-platform.com/v1/models/{model.metadata.name}/{model.metadata.version}/predict"
+        # Simula a criação de um endpoint
+        endpoint = f"http://127.0.0.1:5001/predict/{model.metadata.name}/{model.metadata.version}"
+        model.endpoint = endpoint
+
         self.deployments[deployment_id] = {
             "model": model,
             "config": config,
             "deployed_at": datetime.now(),
             "endpoint": endpoint,
-            "status": "running"
+            "status": "active"
         }
-        model.endpoint = endpoint
-        model.status = ModelStatus.PRODUCTION # Assume que o deployment bem-sucedido o coloca em produção
-        self.registry._save_registry() # Salva o status atualizado do modelo
         self._save_deployments()
-        
-        print(f"✓ Modelo {deployment_id} deployed com sucesso. Endpoint: {endpoint}")
+        print(f"✓ Modelo {model.metadata.name} v{model.metadata.version} implantado com sucesso. Estratégia: {config.strategy.value}")
         return endpoint
 
-    def undeploy_model(self, model_name: str, model_version: str) -> bool:
+    def undeploy_model(self, model_name: str, version: str) -> bool:
         """
-        Remove um modelo implantado da plataforma.
+        Remove um modelo do deployment ativo.
         """
-        deployment_id = f"{model_name}-{model_version}"
+        deployment_id = f"{model_name}-{version}"
         if deployment_id in self.deployments:
             del self.deployments[deployment_id]
-            model = self.registry.get_model(model_name, model_version)
-            if model:
-                model.endpoint = None
-                model.status = ModelStatus.ARCHIVED # Após undeploy, o modelo é arquivado
-                self.registry._save_registry()
             self._save_deployments()
-            print(f"✓ Modelo {model_name} v{model_version} desimplantado com sucesso.")
+            print(f"✓ Modelo {model_name} v{version} removido do deployment.")
             return True
-        print(f"⚠ Modelo {model_name} v{model_version} não encontrado ou não implantado.")
+        print(f"✗ Deployment para o modelo {model_name} v{version} não encontrado.")
         return False
 
-    def scale_deployment(self, model_name: str, model_version: str, new_replicas: int) -> bool:
+    def promote_canary_to_production(self, model: Model) -> bool:
         """
-        Ajusta o número de réplicas para um deployment existente.
+        Promove a versão canary para 100% do tráfego, tornando-a a nova versão de produção.
+        Assume que o modelo já está em um deployment canary ativo.
         """
-        deployment_id = f"{model_name}-{model_version}"
+        deployment_id = f"{model.metadata.name}-{model.metadata.version}"
+        if deployment_id not in self.deployments:
+            print(f"✗ Erro: Deployment canary para {model.metadata.name} v{model.metadata.version} não encontrado.")
+            return False
+
+        current_deployment = self.deployments[deployment_id]
+        if current_deployment["config"].strategy != DeploymentStrategy.CANARY:
+            print(f"✗ Erro: O deployment {deployment_id} não é uma estratégia Canary ativa.")
+            return False
+
+        print(f"  Promovendo canary {model.metadata.name} v{model.metadata.version} para produção completa...")
+        # Simula a atualização da configuração de tráfego para 100%
+        current_deployment["config"].canary_traffic_percentage = 100
+        current_deployment["config"].strategy = DeploymentStrategy.BLUE_GREEN # Ou PRODUCTION_ROLLOUT
+        model.promote_to_production() # Promove o modelo no registro para PRODUCTION
+        self.registry._save_registry() # Salva o registro após a promoção do modelo
+        self._save_deployments()
+        print(f"✓ Canary {model.metadata.name} v{model.metadata.version} promovido para produção completa.")
+        return True
+
+    def scale_deployment(self, model_name: str, version: str, new_replicas: int) -> bool:
+        """
+        Escala o número de réplicas para um deployment específico.
+        """
+        deployment_id = f"{model_name}-{version}"
         if deployment_id in self.deployments:
             self.deployments[deployment_id]["config"].replicas = new_replicas
             self._save_deployments()
-            print(f"✓ Deployment {deployment_id} escalado para {new_replicas} réplicas.")
+            print(f"✓ Deployment {model_name} v{version} escalado para {new_replicas} réplicas.")
             return True
-        print(f"⚠ Deployment {deployment_id} não encontrado.")
+        print(f"✗ Deployment {deployment_id} não encontrado.")
         return False
 
-    def predict(self, model_name: str, version: str, input_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-        """
-        Realiza uma previsão usando um modelo implantado.
-        """
-        deployment_id = f"{model_name}-{version}"
-        if deployment_id not in self.deployments:
-            print(f"✗ Erro: Modelo {model_name} v{version} não encontrado ou não implantado.")
-            return None
-        
-        model = self.deployments[deployment_id]["model"]
-        # Aqui, em um cenário real, haveria uma chamada HTTP para o endpoint do modelo
-        # return requests.post(model.endpoint, json=input_data).json()
-        return model.predict(input_data)
 
-    def list_deployments(self) -> List[Dict[str, Any]]:
-        """
-        Lista todos os deployments ativos com suas informações.
-        """
+# --- API de Serviço de Modelos (Flask) ---
+
+if Flask:
+    app = Flask(__name__)
+    platform_api = DeploymentPlatform("MLOpsPlatformAPI") # Instância da plataforma para a API
+
+    @app.route("/predict/<string:model_name>/<string:version>", methods=["POST"])
+    def predict_endpoint(model_name, version):
+        data = request.get_json()
+        if not data or "features" not in data:
+            return jsonify({"error": "Formato de entrada inválido. Esperado {\"features\": [[...]]}"}), 400
+
+        model = platform_api.registry.get_model(model_name, version)
+        if not model or model.status != ModelStatus.PRODUCTION:
+            return jsonify({"error": f"Modelo {model_name} v{version} não encontrado ou não está em produção"}), 404
+
+        try:
+            prediction_result = model.predict(data)
+            return jsonify(prediction_result), 200
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
+
+    @app.route("/models", methods=["GET"])
+    def list_models_endpoint():
+        models_info = platform_api.registry.list_models()
+        return jsonify(models_info), 200
+
+    @app.route("/deployments", methods=["GET"])
+    def list_deployments_endpoint():
         deployments_info = []
-        for dep_id, dep_info in self.deployments.items():
+        for dep_id, dep_data in platform_api.deployments.items():
             deployments_info.append({
-                "deployment_id": dep_id,
-                "model_name": dep_info["model"].metadata.name,
-                "model_version": dep_info["model"].metadata.version,
-                "status": dep_info["status"],
-                "endpoint": dep_info["endpoint"],
-                "strategy": dep_info["config"].strategy.value,
-                "replicas": dep_info["config"].replicas,
-                "deployed_at": dep_info["deployed_at"].isoformat()
+                "id": dep_id,
+                "model_name": dep_data["model"].metadata.name,
+                "model_version": dep_data["model"].metadata.version,
+                "status": dep_data["status"],
+                "endpoint": dep_data["endpoint"],
+                "strategy": dep_data["config"].strategy.value,
+                "replicas": dep_data["config"].replicas,
+                "canary_traffic_percentage": dep_data["config"].canary_traffic_percentage
             })
-        return deployments_info
+        return jsonify(deployments_info), 200
 
-    def create_flask_api(self):
-        """
-        Cria e retorna uma instância da aplicação Flask para a API REST de inferência.
-        """
-        if not Flask:
-            raise ImportError("Flask não está instalado. Execute `pip install Flask`.")
+    @app.route("/reload_platform", methods=["POST"])
+    def reload_platform_endpoint():
+        global platform_api
+        platform_api = DeploymentPlatform("MLOpsPlatformAPI") # Recarrega a instância da plataforma
+        return jsonify({"status": "Plataforma de deployment recarregada com sucesso"}), 200
 
-        app = Flask(__name__)
-
-        @app.route("/predict/<model_name>/<version>", methods=["POST"])
-        def predict_endpoint(model_name, version):
-            input_data = request.json
-            if not input_data:
-                return jsonify({"error": "Dados de entrada não fornecidos"}), 400
-            
-            prediction = self.predict(model_name, version, input_data)
-            if prediction:
-                return jsonify(prediction)
-            return jsonify({"error": "Modelo não encontrado ou não implantado"}), 404
-
-        @app.route("/models", methods=["GET"])
-        def list_registered_models():
-            models = self.registry.list_models()
-            return jsonify(models)
-
-        @app.route("/deployments", methods=["GET"])
-        def list_active_deployments():
-            deployments = self.list_deployments()
-            return jsonify(deployments)
-
-        return app
-
-
-def example_usage():
-    """
-    Exemplo de uso da plataforma de deployment de modelos.
-    """
-    # Limpar arquivos de registro e deployment para um exemplo limpo
-    if os.path.exists("model_registry.json"):
-        os.remove("model_registry.json")
-    if os.path.exists("model_deployments.json"):
-        os.remove("model_deployments.json")
-
-    platform = DeploymentPlatform("production-platform")
-
-    # --- Modelo 1: Churn Predictor v1.0.0 ---
-    print("\n" + "=" * 20 + " Churn Predictor v1.0.0 " + "=" * 20)
-    metadata_v1 = ModelMetadata(
-        name="customer-churn-predictor",
-        version="1.0.0",
-        framework="scikit-learn",
-        author="data-science-team",
-        description="Modelo para predição de churn de clientes",
-        metrics={"accuracy": 0.92, "precision": 0.89},
-        tags=["classification", "churn"],
-        model_path="./models/churn_v1.pkl" # Caminho simulado
-    )
-    model_v1 = Model(metadata_v1)
-    platform.registry.register_model(model_v1)
-    model_v1.promote_to_staging()
-    platform.deploy_model(model_v1, DeploymentConfig(strategy=DeploymentStrategy.BLUE_GREEN, replicas=2))
-
-    # --- Modelo 2: Churn Predictor v1.1.0 (nova versão) ---
-    print("\n" + "=" * 20 + " Churn Predictor v1.1.0 " + "=" * 20)
-    metadata_v1_1 = ModelMetadata(
-        name="customer-churn-predictor",
-        version="1.1.0",
-        framework="tensorflow",
-        author="data-science-team",
-        description="Modelo de churn aprimorado com rede neural",
-        metrics={"accuracy": 0.94, "precision": 0.91},
-        tags=["classification", "churn", "neural-network"],
-        model_path="./models/churn_v1_1.h5" # Caminho simulado
-    )
-    model_v1_1 = Model(metadata_v1_1)
-    platform.registry.register_model(model_v1_1)
-    model_v1_1.promote_to_staging()
-    platform.deploy_model(model_v1_1, DeploymentConfig(strategy=DeploymentStrategy.CANARY, replicas=1))
-
-    # --- Modelo 3: Fraud Detector v2.0.0 ---
-    print("\n" + "=" * 20 + " Fraud Detector v2.0.0 " + "=" * 20)
-    metadata_fraud = ModelMetadata(
-        name="fraud-detector",
-        version="2.0.0",
-        framework="pytorch",
-        author="fraud-prevention-team",
-        description="Modelo para detecção de fraude em transações",
-        metrics={"f1_score": 0.90, "recall": 0.95},
-        tags=["anomaly-detection", "fraud"],
-        model_path="./models/fraud_v2.pt" # Caminho simulado
-    )
-    model_fraud = Model(metadata_fraud)
-    platform.registry.register_model(model_fraud)
-    model_fraud.promote_to_staging()
-    platform.deploy_model(model_fraud, DeploymentConfig(strategy=DeploymentStrategy.ROLLING, replicas=3))
-
-    print("\n" + "=" * 20 + " Listando Modelos e Deployments " + "=" * 20)
-    print("\nModelos Registrados:")
-    print(json.dumps(platform.registry.list_models(), indent=2))
-
-    print("\nDeployments Ativos:")
-    print(json.dumps(platform.list_deployments(), indent=2))
-
-    print("\n" + "=" * 20 + " Realizando Previsões " + "=" * 20)
-    input_data_churn = {"feature_1": 0.7, "feature_2": 10, "feature_3": "A"}
-    input_data_fraud = {"transaction_amount": 1500.0, "transaction_type": "online"}
-
-    print("\nPrevisão com Churn Predictor v1.0.0:")
-    print(platform.predict("customer-churn-predictor", "1.0.0", input_data_churn))
-
-    print("\nPrevisão com Churn Predictor v1.1.0:")
-    print(platform.predict("customer-churn-predictor", "1.1.0", input_data_churn))
-
-    print("\nPrevisão com Fraud Detector v2.0.0:")
-    # O modelo de fraude usará o mock_model_instance, então o input_data_fraud será ignorado
-    print(platform.predict("fraud-detector", "2.0.0", input_data_fraud))
-
-    print("\n" + "=" * 20 + " Gerenciamento de Deployments " + "=" * 20)
-    print("\nEscalando Churn Predictor v1.0.0 para 5 réplicas...")
-    platform.scale_deployment("customer-churn-predictor", "1.0.0", 5)
-    print("Deployments Ativos após escala:")
-    print(json.dumps(platform.list_deployments(), indent=2))
-
-    print("\nDesimplantando Churn Predictor v1.0.0...")
-    platform.undeploy_model("customer-churn-predictor", "1.0.0")
-    print("Deployments Ativos após desimplantação:")
-    print(json.dumps(platform.list_deployments(), indent=2))
-
-    print("\n" + "=" * 80)
-    print("Exemplo Concluído")
-    print("=" * 80)
-
-
-if __name__ == "__main__":
-    example_usage()
+    if __name__ == "__main__":
+        app.run(port=5001, debug=False, use_reloader=False)
 

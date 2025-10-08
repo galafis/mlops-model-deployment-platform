@@ -6,6 +6,9 @@
 ![Kubernetes](https://img.shields.io/badge/Orchestration-Kubernetes-blue?style=for-the-badge&logo=kubernetes&logoColor=white)
 ![Mermaid](https://img.shields.io/badge/Diagrams-Mermaid-orange?style=for-the-badge&logo=mermaid&logoColor=white)
 ![License](https://img.shields.io/badge/License-MIT-green.svg?style=for-the-badge)
+![GitHub Actions](https://github.com/galafis/mlops-model-deployment-platform/workflows/CI/badge.svg)
+![Code Style: Black](https://img.shields.io/badge/code%20style-black-000000.svg)
+![PyPI - Python Version](https://img.shields.io/pypi/pyversions/scikit-learn)
 
 ---
 
@@ -63,7 +66,7 @@ The main objective of this project is to **provide a detailed guide and function
 - **Full Automation**: Demonstration of how to automate the model lifecycle, from registration to deployment and undeployment, following CI/CD principles.
 - **Professional Code**: Well-structured code examples, following industry best practices, with a focus on modularity, reusability, and maintainability.
 - **Complete Documentation**: Each platform component is accompanied by detailed documentation, explanatory diagrams, and practical use cases.
-- **Tests Included**: Code modules validated through unit and integration tests, ensuring the robustness and reliability of the solutions.
+- **Tests Included**: Code modules validated through unit and integration tests, guaranteeing the robustness and reliability of the solutions.
 
 ### 📊 Visualization
 
@@ -86,6 +89,8 @@ The main objective of this project is to **provide a detailed guide and function
 | **Serialização**  | Pickle / JSON   | Para persistência de modelos e comunicação da API.                        |
 | **Testes**        | `unittest`      | Framework de testes padrão do Python para validação de funcionalidades.   |
 | **Diagramação**   | Mermaid         | Para criação de diagramas de arquitetura e fluxo de trabalho no README.   |
+| **Dados**         | `pandas`, `numpy` | Para manipulação e geração de dados no exemplo avançado.                  |
+| **ML**            | `scikit-learn`  | Para treinamento de modelos de Machine Learning no exemplo avançado.      |
 
 ---
 
@@ -96,7 +101,8 @@ mlops-model-deployment-platform/
 ├── src/
 │   ├── __init__.py
 │   ├── model_deployment.py      # Lógica principal da plataforma de deployment
-│   └── model_serving_api.py     # Implementação da API Flask para inferência
+│   ├── model_serving_api.py     # Implementação da API Flask para inferência
+│   └── advanced_example.py      # Módulo de exemplo avançado com treinamento e deploy
 ├── data/                        # Dados de exemplo e modelos pré-treinados
 ├── images/                      # Imagens e diagramas para o README e documentação
 ├── tests/                       # Testes unitários e de integração
@@ -118,6 +124,8 @@ Para começar, clone o repositório e explore os diretórios `src/` e `docs/` pa
 - Python 3.9+
 - `pip` (gerenciador de pacotes Python)
 - `scikit-learn` (para o modelo de exemplo)
+- `pandas` (para manipulação de dados no exemplo avançado)
+- `requests` (para interagir com a API no exemplo avançado)
 
 ### Instalação
 
@@ -131,183 +139,50 @@ pip install -r requirements.txt
 
 ### Exemplo de Uso Avançado (Python)
 
-O exemplo abaixo demonstra a inicialização da `DeploymentPlatform`, o registro de um modelo, a promoção entre ambientes (staging/production), o deployment com estratégias avançadas e a interação com a API de inferência. Este código ilustra o ciclo de vida completo de um modelo em um ambiente MLOps.
+O módulo `src/advanced_example.py` demonstra um ciclo de vida MLOps mais completo, incluindo:
 
-```python
-from src.model_deployment import DeploymentPlatform, ModelMetadata, Model, DeploymentConfig, DeploymentStrategy
-from src.model_serving_api import app as model_api_app # Importa o aplicativo Flask
-import requests
-import json
-import threading
-import time
+- Geração de dados sintéticos para um problema de classificação.
+- Treinamento de um modelo `RandomForestClassifier` com `scikit-learn`.
+- Registro do modelo na `DeploymentPlatform`.
+- Promoção do modelo para ambientes de staging e produção.
+- Início de uma API de inferência em tempo real (Flask).
+- Realização de deployment com estratégia Blue/Green.
+- Simulação de previsões via API.
+- Treinamento e registro de uma nova versão do modelo.
+- Realização de deployment com estratégia Canary Release para a nova versão.
+- Simulação de tráfego entre as versões para teste do Canary.
+- Promoção da versão Canary para produção completa.
+- Desativação da versão antiga do modelo.
 
-# Exemplo de uso
-if __name__ == "__main__":
-    print("\n==================================================")
-    print("Demonstração da Plataforma de Deploy de Modelos MLOps")
-    print("==================================================")
+Para executar este exemplo, certifique-se de ter todas as dependências instaladas (`pip install -r requirements.txt`) e execute o arquivo:
 
-    # --- 0. Treinar e Salvar um Modelo de Exemplo ---
-    # Em um cenário real, isso viria de um pipeline de treinamento.
-    # Para este exemplo, vamos criar um modelo dummy.
-    print("\n--- 0. Treinando e Salvando Modelo de Exemplo ---")
-    try:
-        from sklearn.linear_model import LogisticRegression
-        import pickle
-        import numpy as np
-
-        # Criar um modelo dummy
-        X_train = np.array([[1, 2], [2, 3], [3, 4], [4, 5], [5, 6]])
-        y_train = np.array([0, 0, 1, 1, 1])
-        dummy_model = LogisticRegression()
-        dummy_model.fit(X_train, y_train)
-
-        # Salvar o modelo
-        model_path = "./models/dummy_model_v1.pkl"
-        with open(model_path, "wb") as f:
-            pickle.dump(dummy_model, f)
-        print(f"  Modelo dummy salvo em {model_path}")
-    except ImportError:
-        print("  Scikit-learn não instalado. Pulando a criação do modelo dummy.")
-        print("  Por favor, instale com: pip install scikit-learn")
-        exit() # Sair se scikit-learn não estiver disponível
-
-    # --- 1. Inicializar Plataforma de Deployment ---
-    print("\n--- 1. Inicializando Plataforma de Deployment ---")
-    platform = DeploymentPlatform("production-platform")
-    
-    # --- 2. Registrar Modelo ---
-    print("\n--- 2. Registrando Modelo ---")
-    metadata_v1 = ModelMetadata(
-        name="customer-churn-predictor",
-        version="1.0.0",
-        framework="scikit-learn",
-        author="data-science-team@company.com",
-        description="Modelo para predição de churn de clientes (v1)",
-        metrics={"accuracy": 0.92, "precision": 0.89, "recall": 0.91},
-        tags=["classification", "churn", "production"],
-        model_path="./models/dummy_model_v1.pkl"
-    )
-    model_v1 = Model(metadata_v1)
-    platform.registry.register_model(model_v1)
-    print(f"  Modelo {model_v1.metadata.name} v{model_v1.metadata.version} registrado.")
-
-    # --- 3. Promover Modelo para Staging e Produção ---
-    print("\n--- 3. Promovendo Modelo para Staging e Produção ---")
-    model_v1.promote_to_staging()
-    print(f"  Modelo v1 status: {model_v1.status.value}")
-    model_v1.promote_to_production()
-    print(f"  Modelo v1 status: {model_v1.status.value}")
-
-    # --- 4. Iniciar API de Serviço de Modelos (em thread separada) ---
-    print("\n--- 4. Iniciando API de Serviço de Modelos ---")
-    # A API precisa ser executada em uma thread separada para não bloquear o script principal
-    api_thread = threading.Thread(target=lambda: model_api_app.run(port=5000, debug=False, use_reloader=False))
-    api_thread.daemon = True # Permite que a thread seja encerrada quando o programa principal sair
-    api_thread.start()
-    time.sleep(2) # Dar um tempo para a API iniciar
-    print("  API de serviço de modelos iniciada em http://127.0.0.1:5000")
-
-    # --- 5. Realizar Deployment (Blue/Green) ---
-    print("\n--- 5. Realizando Deployment Blue/Green para v1.0.0 ---")
-    config_v1 = DeploymentConfig(
-        strategy=DeploymentStrategy.BLUE_GREEN,
-        replicas=3,
-        auto_scaling=True
-    )
-    platform.deploy_model(model_v1, config_v1)
-    print(f"  Deployment de {model_v1.metadata.name} v{model_v1.metadata.version} iniciado com estratégia {config_v1.strategy.value}.")
-    time.sleep(1) # Simular tempo de deployment
-    info_v1 = platform.get_deployment_info(model_v1.metadata.name, model_v1.metadata.version)
-    if info_v1:
-        print(f"  Status do Deployment v1: {info_v1.get("status")}")
-
-    # --- 6. Realizar Previsão via API ---
-    print("\n--- 6. Realizando Previsão com o Modelo Implantado (v1.0.0) ---")
-    input_data = {"features": [[0.7, 10]]} # Exemplo de entrada para o modelo dummy
-    try:
-        response = requests.post("http://127.0.0.1:5000/predict/customer-churn-predictor/1.0.0", json=input_data)
-        response.raise_for_status()
-        prediction_result = response.json()
-        print(f"  Resultado da previsão (v1.0.0): {prediction_result}")
-    except requests.exceptions.ConnectionError:
-        print("  ERRO: Não foi possível conectar à API Flask. Verifique se ela está rodando.")
-    except Exception as e:
-        print(f"  Erro ao consultar API para previsão: {e}")
-
-    # --- 7. Registrar e Implantar uma Nova Versão (v2.0.0) com Canary Release ---
-    print("\n--- 7. Registrando e Implantando Nova Versão (v2.0.0) com Canary Release ---")
-    # Criar um modelo dummy v2
-    model_path_v2 = "./models/dummy_model_v2.pkl"
-    dummy_model_v2 = LogisticRegression()
-    dummy_model_v2.fit(X_train, y_train) # Usando os mesmos dados para simplicidade
-    with open(model_path_v2, "wb") as f:
-        pickle.dump(dummy_model_v2, f)
-    print(f"  Modelo dummy v2 salvo em {model_path_v2}")
-
-    metadata_v2 = ModelMetadata(
-        name="customer-churn-predictor",
-        version="2.0.0",
-        framework="scikit-learn",
-        author="data-science-team@company.com",
-        description="Modelo para predição de churn de clientes (v2 - melhorado)",
-        metrics={"accuracy": 0.95, "precision": 0.93, "recall": 0.94},
-        tags=["classification", "churn", "production"],
-        model_path="./models/dummy_model_v2.pkl"
-    )
-    model_v2 = Model(metadata_v2)
-    platform.registry.register_model(model_v2)
-    model_v2.promote_to_production()
-
-    config_v2 = DeploymentConfig(
-        strategy=DeploymentStrategy.CANARY,
-        replicas=1, # Iniciar com 1 réplica para canary
-        auto_scaling=False,
-        canary_traffic_percentage=10 # 10% do tráfego para a nova versão
-    )
-    platform.deploy_model(model_v2, config_v2)
-    print(f"  Deployment de {model_v2.metadata.name} v{model_v2.metadata.version} iniciado com estratégia {config_v2.strategy.value}.")
-    time.sleep(1) # Simular tempo de deployment
-    info_v2 = platform.get_deployment_info(model_v2.metadata.name, model_v2.metadata.version)
-    if info_v2:
-        print(f"  Status do Deployment v2 (Canary): {info_v2.get("status")}")
-
-    # --- 8. Escalar Deployment (para v1.0.0) ---
-    print("\n--- 8. Escalando Deployment de v1.0.0 para 5 réplicas ---")
-    platform.scale_deployment(model_v1.metadata.name, model_v1.metadata.version, 5)
-    print(f"  Deployment de {model_v1.metadata.name} v{model_v1.metadata.version} escalado para 5 réplicas (simulado).")
-
-    # --- 9. Desimplantar Modelo (v1.0.0) ---
-    print("\n--- 9. Desimplantando Modelo v1.0.0 ---")
-    platform.undeploy_model(model_v1.metadata.name, model_v1.metadata.version)
-    info_v1_after_undeploy = platform.get_deployment_info(model_v1.metadata.name, model_v1.metadata.version)
-    if not info_v1_after_undeploy:
-        print(f"  Modelo {model_v1.metadata.name} v{model_v1.metadata.version} desimplantado com sucesso.")
-
-    # --- 10. Desimplantar Modelo (v2.0.0) ---
-    print("\n--- 10. Desimplantando Modelo v2.0.0 ---")
-    platform.undeploy_model(model_v2.metadata.name, model_v2.metadata.version)
-    info_v2_after_undeploy = platform.get_deployment_info(model_v2.metadata.name, model_v2.metadata.version)
-    if not info_v2_after_undeploy:
-        print(f"  Modelo {model_v2.metadata.name} v{model_v2.metadata.version} desimplantado com sucesso.")
-
-    print("\n==================================================")
-    print("Demonstração Concluída.")
-    print("==================================================")
+```bash
+python src/advanced_example.py
 ```
+
+Este exemplo fornece uma visão prática de como as diferentes funcionalidades da plataforma MLOps interagem para gerenciar o ciclo de vida de modelos em um ambiente de produção simulado.
 
 ---
 
 ## 🤝 Contribuição
 
-Contribuições são bem-vindas! Sinta-se à vontade para abrir issues, enviar pull requests ou sugerir melhorias. Por favor, siga as diretrizes de contribuição.
+Contribuições são bem-vindas! Sinta-se à vontade para abrir issues e pull requests. Por favor, siga as diretrizes de contribuição.
 
 ---
 
-## 📝 Licença
+## 📄 Licença
 
 Este projeto está licenciado sob a Licença MIT - veja o arquivo [LICENSE](LICENSE) para detalhes.
 
 ---
 
-**Autor:** Gabriel Demetrios Lafis  \n**Ano:** 2025
+## 📞 Contato
+
+Gabriel Demetrios Lafis - [LinkedIn](https://www.linkedin.com/in/gabriel-demetrios-lafis/)
+
+---
+
+## 🌟 Agradecimentos
+
+Um agradecimento especial a todos os recursos de código aberto e à comunidade MLOps que tornam projetos como este possíveis.
+

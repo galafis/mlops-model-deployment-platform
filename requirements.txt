@@ -1,2 +1,6 @@
 pandas
 pytest
+scikit-learn
+requests
+flask
+
