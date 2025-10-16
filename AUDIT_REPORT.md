@@ -176,7 +176,7 @@ A comprehensive audit of the MLOps Model Deployment Platform repository was cond
 ### Overall Coverage: 49%
 
 | Module | Coverage |
-|--------|----------|
+|:-------|:---------|
 | `model_deployment.py` | **72%** ✅ |
 | `advanced_example.py` | 0% (not tested) |
 | `model_serving_api.py` | 0% (tested via Flask client) |
