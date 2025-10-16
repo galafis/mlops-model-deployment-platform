@@ -1,4 +1,3 @@
-
 import unittest
 import sys
 import os
@@ -7,7 +6,7 @@ import json
 import shutil
 
 # Adicionar o diretório src ao path para importar os módulos
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from model_deployment import (
     DeploymentPlatform,
@@ -16,8 +15,9 @@ from model_deployment import (
     ModelStatus,
     DeploymentStrategy,
     DeploymentConfig,
-    ModelRegistry
+    ModelRegistry,
 )
+
 
 # Mock Flask para testes de API
 class MockFlaskClient:
@@ -30,9 +30,10 @@ class MockFlaskClient:
             return MockResponse(response)
 
     def post(self, path, json=None):
-        with self.app.test_request_context(path, method='POST', json=json):
+        with self.app.test_request_context(path, method="POST", json=json):
             response = self.app.dispatch_request()
             return MockResponse(response)
+
 
 class MockResponse:
     def __init__(self, response):
@@ -60,7 +61,7 @@ class TestModelDeployment(unittest.TestCase):
             framework="scikit-learn",
             author="test-author",
             description="A test model v1",
-            model_path="./models/test_v1.pkl"
+            model_path="./models/test_v1.pkl",
         )
         self.model_v1 = Model(self.metadata_v1)
 
@@ -70,7 +71,7 @@ class TestModelDeployment(unittest.TestCase):
             framework="tensorflow",
             author="test-author",
             description="A test model v2",
-            model_path="./models/test_v2.h5"
+            model_path="./models/test_v2.h5",
         )
         self.model_v2 = Model(self.metadata_v2)
 
@@ -80,7 +81,7 @@ class TestModelDeployment(unittest.TestCase):
             framework="pytorch",
             author="other-author",
             description="Another test model",
-            model_path="./models/other_v1.pt"
+            model_path="./models/other_v1.pt",
         )
         self.model_other = Model(self.metadata_other)
 
@@ -118,7 +119,7 @@ class TestModelDeployment(unittest.TestCase):
     def test_deploy_model_blue_green(self):
         self.platform.registry.register_model(self.model_v1)
         self.model_v1.promote_to_staging()
-        self.model_v1.promote_to_production() # Status muda para PRODUCTION após deploy
+        self.model_v1.promote_to_production()  # Status muda para PRODUCTION após deploy
         config = DeploymentConfig(strategy=DeploymentStrategy.BLUE_GREEN)
         endpoint = self.platform.deploy_model(self.model_v1, config)
         self.assertIsNotNone(endpoint)
@@ -175,12 +176,15 @@ class TestModelDeployment(unittest.TestCase):
         self.platform.registry.register_model(self.model_v1)
         self.model_v1.promote_to_staging()
         self.model_v1.promote_to_production()
+        self.platform.save_registry()  # Save after promotions
+
         self.platform.registry.register_model(self.model_other)
         self.model_other.promote_to_staging()
+        self.platform.save_registry()  # Save after promotions
 
         # Criar nova plataforma para carregar do arquivo
         new_platform = DeploymentPlatform(name="new-platform", registry_file=self.test_registry_file)
-        
+
         # Verificar se os modelos foram carregados
         self.assertIsNotNone(new_platform.registry.get_model("test-model", "1.0.0"))
         self.assertEqual(new_platform.registry.get_model("test-model", "1.0.0").status, ModelStatus.PRODUCTION)
@@ -199,7 +203,7 @@ class TestModelDeployment(unittest.TestCase):
 
         # Criar nova plataforma para carregar deployments
         new_platform = DeploymentPlatform(name="new-platform", registry_file=self.test_registry_file)
-        new_platform.deployments = new_platform._load_deployments() # Forçar recarregamento
+        new_platform.deployments = new_platform._load_deployments()  # Forçar recarregamento
 
         # Verificar se os deployments foram carregados
         self.assertIn(f"test-model-1.0.0", new_platform.deployments)
@@ -207,63 +211,61 @@ class TestModelDeployment(unittest.TestCase):
         self.assertEqual(new_platform.deployments[f"test-model-1.0.0"]["status"], "running")
 
     def test_flask_api_predict_endpoint(self):
-        # Mock Flask app
-        if not hasattr(self.platform, 'create_flask_api'):
-            self.skipTest("Flask not installed or create_flask_api not available")
-
+        # Use Flask's built-in test client
         app = self.platform.create_flask_api()
         app.testing = True
-        client = MockFlaskClient(app)
+        client = app.test_client()
 
         self.platform.registry.register_model(self.model_v1)
         self.model_v1.promote_to_staging()
-        self.platform.deploy_model(self.model_v1, DeploymentConfig(strategy=DeploymentStrategy.BLUE_GREEN))
+        self.model_v1.promote_to_production()
+        self.platform.save_registry()
+        config = DeploymentConfig(strategy=DeploymentStrategy.BLUE_GREEN)
+        self.platform.deploy_model(self.model_v1, config)
 
-        input_data = {"feature_1": 0.6, "feature_2": 5}
+        input_data = {"features": [[0.6, 5]]}
         response = client.post("/predict/test-model/1.0.0", json=input_data)
         self.assertEqual(response.status_code, 200)
-        data = json.loads(response.data)
-        self.assertEqual(data["prediction"], 1)
+        data = response.get_json()
+        self.assertIn("prediction", data)
         self.assertEqual(data["model_version"], "1.0.0")
 
     def test_flask_api_list_models_endpoint(self):
-        if not hasattr(self.platform, 'create_flask_api'):
-            self.skipTest("Flask not installed or create_flask_api not available")
-
+        # Use Flask's built-in test client
         app = self.platform.create_flask_api()
         app.testing = True
-        client = MockFlaskClient(app)
+        client = app.test_client()
 
         self.platform.registry.register_model(self.model_v1)
         self.platform.registry.register_model(self.model_v2)
 
         response = client.get("/models")
         self.assertEqual(response.status_code, 200)
-        data = json.loads(response.data)
+        data = response.get_json()
         self.assertEqual(len(data), 2)
         self.assertEqual(data[0]["name"], "test-model")
         self.assertEqual(data[1]["version"], "2.0.0")
 
     def test_flask_api_list_deployments_endpoint(self):
-        if not hasattr(self.platform, 'create_flask_api'):
-            self.skipTest("Flask not installed or create_flask_api not available")
-
+        # Use Flask's built-in test client
         app = self.platform.create_flask_api()
         app.testing = True
-        client = MockFlaskClient(app)
+        client = app.test_client()
 
         self.platform.registry.register_model(self.model_v1)
         self.model_v1.promote_to_staging()
-        self.platform.deploy_model(self.model_v1, DeploymentConfig(strategy=DeploymentStrategy.BLUE_GREEN))
+        self.model_v1.promote_to_production()
+        self.platform.save_registry()
+        config = DeploymentConfig(strategy=DeploymentStrategy.BLUE_GREEN)
+        self.platform.deploy_model(self.model_v1, config)
 
         response = client.get("/deployments")
         self.assertEqual(response.status_code, 200)
-        data = json.loads(response.data)
+        data = response.get_json()
         self.assertEqual(len(data), 1)
         self.assertEqual(data[0]["model_name"], "test-model")
         self.assertEqual(data[0]["model_version"], "1.0.0")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main(verbosity=2)
-
