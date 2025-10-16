@@ -136,7 +136,10 @@ class Model:
 
     def promote_to_staging(self) -> bool:
         """Promove modelo para staging"""
-        if self.status in [ModelStatus.TRAINING, ModelStatus.ARCHIVED]:
+        if self.status in [ModelStatus.TRAINING, ModelStatus.STAGED]:
+            if self.status == ModelStatus.STAGED:
+                print(f"⚠ Modelo {self.metadata.name} v{self.metadata.version} já está em STAGED.")
+                return True
             self.status = ModelStatus.STAGED
             self._log_status_change("staged")
             print(f"✓ Modelo {self.metadata.name} v{self.metadata.version} promovido para STAGED.")
@@ -149,7 +152,10 @@ class Model:
         Promove modelo para produção.
         Requer que o modelo esteja em STAGED.
         """
-        if self.status == ModelStatus.STAGED:
+        if self.status == ModelStatus.STAGED or self.status == ModelStatus.PRODUCTION:
+            if self.status == ModelStatus.PRODUCTION:
+                print(f"⚠ Modelo {self.metadata.name} v{self.metadata.version} já está em PRODUCTION.")
+                return True
             self.status = ModelStatus.PRODUCTION
             self._log_status_change("production")
             print(f"✓ Modelo {self.metadata.name} v{self.metadata.version} promovido para PRODUCTION.")
@@ -279,6 +285,18 @@ class ModelRegistry:
         print(f"✓ Modelo '{model.metadata.name}' v{model.metadata.version} registrado com sucesso.")
         return True
     
+    def update_model_status(self, model: Model) -> bool:
+        """
+        Atualiza o status de um modelo já registrado e salva no disco.
+        """
+        if model.metadata.name in self.models:
+            for i, m in enumerate(self.models[model.metadata.name]):
+                if m.metadata.version == model.metadata.version:
+                    self.models[model.metadata.name][i] = model
+                    self._save_registry()
+                    return True
+        return False
+    
     def get_model(self, model_name: str, version: Optional[str] = None) -> Optional[Model]:
         """
         Retorna um modelo específico pela versão ou a versão mais recente se nenhuma for especificada.
@@ -330,6 +348,32 @@ class DeploymentPlatform:
         self.name = name
         self.registry = ModelRegistry(registry_file)
         self.deployments: Dict[str, Dict[str, Any]] = self._load_deployments()
+
+    def promote_model_to_staging(self, model_name: str, version: str) -> bool:
+        """
+        Promove um modelo para staging e salva o estado.
+        """
+        model = self.registry.get_model(model_name, version)
+        if model and model.promote_to_staging():
+            self.registry.update_model_status(model)
+            return True
+        return False
+
+    def promote_model_to_production(self, model_name: str, version: str) -> bool:
+        """
+        Promove um modelo para produção e salva o estado.
+        """
+        model = self.registry.get_model(model_name, version)
+        if model and model.promote_to_production():
+            self.registry.update_model_status(model)
+            return True
+        return False
+
+    def save_registry(self):
+        """
+        Salva manualmente o estado do registro.
+        """
+        self.registry._save_registry()
 
     def _load_deployments(self) -> Dict[str, Dict[str, Any]]:
         """
@@ -395,6 +439,11 @@ class DeploymentPlatform:
             print(f"✗ Erro: Modelo {model.metadata.name} v{model.metadata.version} já possui um deployment ativo.")
             return None
 
+        # Promover para produção se estiver em STAGED
+        if model.status == ModelStatus.STAGED:
+            model.promote_to_production()
+            self.registry._save_registry()
+
         # Simula a criação de um endpoint
         endpoint = f"http://127.0.0.1:5001/predict/{model.metadata.name}/{model.metadata.version}"
         model.endpoint = endpoint
@@ -404,7 +453,7 @@ class DeploymentPlatform:
             "config": config,
             "deployed_at": datetime.now(),
             "endpoint": endpoint,
-            "status": "active"
+            "status": "running"
         }
         self._save_deployments()
         print(f"✓ Modelo {model.metadata.name} v{model.metadata.version} implantado com sucesso. Estratégia: {config.strategy.value}")
@@ -412,10 +461,15 @@ class DeploymentPlatform:
 
     def undeploy_model(self, model_name: str, version: str) -> bool:
         """
-        Remove um modelo do deployment ativo.
+        Remove um modelo do deployment ativo e arquiva o modelo.
         """
         deployment_id = f"{model_name}-{version}"
         if deployment_id in self.deployments:
+            # Arquivar o modelo ao fazer undeploy
+            model = self.deployments[deployment_id]["model"]
+            model.archive_model()
+            self.registry._save_registry()
+            
             del self.deployments[deployment_id]
             self._save_deployments()
             print(f"✓ Modelo {model_name} v{version} removido do deployment.")
@@ -460,6 +514,151 @@ class DeploymentPlatform:
             return True
         print(f"✗ Deployment {deployment_id} não encontrado.")
         return False
+
+    def predict(self, model_name: str, version: str, input_data: Any) -> Optional[Dict[str, Any]]:
+        """
+        Realiza uma previsão usando um modelo implantado.
+        """
+        deployment_id = f"{model_name}-{version}"
+        if deployment_id in self.deployments:
+            model = self.deployments[deployment_id]["model"]
+            return model.predict(input_data)
+        print(f"✗ Deployment para modelo {model_name} v{version} não encontrado.")
+        return None
+
+    def load_state(self):
+        """
+        Carrega o estado da plataforma (registro e deployments) do disco.
+        """
+        self.registry = ModelRegistry(self.registry.registry_file)
+        self.deployments = self._load_deployments()
+        print(f"✓ Estado da plataforma carregado com sucesso.")
+
+    def create_flask_api(self):
+        """
+        Cria e retorna uma aplicação Flask para servir modelos.
+        """
+        if not Flask:
+            raise ImportError("Flask não está instalado. Execute: pip install flask")
+        
+        api_app = Flask(__name__)
+        platform_instance = self
+
+        @api_app.route("/predict/<string:model_name>/<string:version>", methods=["POST"])
+        def predict_endpoint(model_name, version):
+            from flask import request, jsonify
+            data = request.get_json()
+            if not data or "features" not in data:
+                return jsonify({"error": "Formato de entrada inválido. Esperado {\"features\": [[...]]}"}), 400
+
+            model = platform_instance.registry.get_model(model_name, version)
+            if not model or model.status != ModelStatus.PRODUCTION:
+                return jsonify({"error": f"Modelo {model_name} v{version} não encontrado ou não está em produção"}), 404
+
+            try:
+                prediction_result = model.predict(data)
+                return jsonify(prediction_result), 200
+            except Exception as e:
+                return jsonify({"error": str(e)}), 500
+
+        @api_app.route("/models", methods=["GET"])
+        def list_models_endpoint():
+            from flask import jsonify
+            models_info = platform_instance.registry.list_models()
+            return jsonify(models_info), 200
+
+        @api_app.route("/deployments", methods=["GET"])
+        def list_deployments_endpoint():
+            from flask import jsonify
+            deployments_info = []
+            for dep_id, dep_data in platform_instance.deployments.items():
+                deployments_info.append({
+                    "id": dep_id,
+                    "model_name": dep_data["model"].metadata.name,
+                    "model_version": dep_data["model"].metadata.version,
+                    "status": dep_data["status"],
+                    "endpoint": dep_data["endpoint"],
+                    "strategy": dep_data["config"].strategy.value,
+                    "replicas": dep_data["config"].replicas,
+                    "canary_traffic_percentage": dep_data["config"].canary_traffic_percentage
+                })
+            return jsonify(deployments_info), 200
+
+        @api_app.route("/register_model", methods=["POST"])
+        def register_model_endpoint():
+            from flask import request, jsonify
+            data = request.get_json()
+            required_fields = ["name", "version", "framework", "author", "description"]
+            if not all(field in data for field in required_fields):
+                return jsonify({"error": f"Campos obrigatórios: {required_fields}"}), 400
+
+            metadata = ModelMetadata(
+                name=data["name"],
+                version=data["version"],
+                framework=data["framework"],
+                author=data["author"],
+                description=data["description"],
+                metrics=data.get("metrics", {}),
+                tags=data.get("tags", []),
+                model_path=data.get("model_path")
+            )
+            model = Model(metadata)
+            
+            if platform_instance.registry.register_model(model):
+                # Automatically promote to staging
+                model.promote_to_staging()
+                platform_instance.registry._save_registry()
+                return jsonify({"status": "Model registered and promoted to STAGED", "model_name": model.metadata.name, "version": model.metadata.version}), 201
+            return jsonify({"error": "Failed to register model"}), 400
+
+        @api_app.route("/deploy_model", methods=["POST"])
+        def deploy_model_endpoint():
+            from flask import request, jsonify
+            data = request.get_json()
+            if not data or "model_name" not in data or "model_version" not in data or "strategy" not in data:
+                return jsonify({"error": "Campos obrigatórios: model_name, model_version, strategy"}), 400
+
+            model = platform_instance.registry.get_model(data["model_name"], data["model_version"])
+            if not model:
+                return jsonify({"error": f"Modelo {data['model_name']} v{data['model_version']} não encontrado"}), 404
+
+            # Promote to production if in staging
+            if model.status == ModelStatus.STAGED:
+                model.promote_to_production()
+                platform_instance.registry._save_registry()
+
+            # Convert strategy string to lowercase to match enum values
+            strategy_str = data["strategy"].lower()
+            config = DeploymentConfig(
+                strategy=DeploymentStrategy(strategy_str),
+                replicas=data.get("replicas", 1),
+                auto_scaling=data.get("auto_scaling", True),
+                canary_traffic_percentage=data.get("canary_traffic_percentage")
+            )
+
+            endpoint = platform_instance.deploy_model(model, config)
+            if endpoint:
+                return jsonify({"status": "Model deployed", "endpoint": endpoint}), 201
+            return jsonify({"error": "Failed to deploy model"}), 400
+
+        @api_app.route("/undeploy_model", methods=["POST"])
+        def undeploy_model_endpoint():
+            from flask import request, jsonify
+            data = request.get_json()
+            if not data or "model_name" not in data or "model_version" not in data:
+                return jsonify({"error": "Campos obrigatórios: model_name, model_version"}), 400
+
+            if platform_instance.undeploy_model(data["model_name"], data["model_version"]):
+                return jsonify({"status": "Model undeployed"}), 200
+            return jsonify({"error": "Failed to undeploy model"}), 400
+
+        @api_app.route("/reload_platform", methods=["POST"])
+        def reload_platform_endpoint():
+            from flask import jsonify
+            platform_instance.load_state()
+            return jsonify({"status": "Plataforma de deployment recarregada com sucesso"}), 200
+
+        return api_app
 
 
 # --- API de Serviço de Modelos (Flask) ---

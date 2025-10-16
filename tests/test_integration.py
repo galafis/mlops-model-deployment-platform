@@ -73,10 +73,10 @@ class TestMLOpsIntegration(unittest.TestCase):
         )
         self.model_v2 = Model(self.metadata_v2)
 
-        # Criar a aplicação Flask
+        # Criar a aplicação Flask usando o método da plataforma
         self.app = self.platform.create_flask_api()
         self.app.testing = True
-        self.client = MockFlaskClient(self.app)
+        self.client = self.app.test_client()
 
     def tearDown(self):
         # Limpar arquivos de teste após cada execução
@@ -98,7 +98,7 @@ class TestMLOpsIntegration(unittest.TestCase):
         }
         response = self.client.post("/register_model", json=register_payload_v1)
         self.assertEqual(response.status_code, 201)
-        self.assertEqual(json.loads(response.data)["status"], "Model registered and promoted to STAGED")
+        self.assertEqual(response.get_json()["status"], "Model registered and promoted to STAGED")
 
         # 2. Deploy modelo v1
         deploy_payload_v1 = {
@@ -108,13 +108,13 @@ class TestMLOpsIntegration(unittest.TestCase):
         }
         response = self.client.post("/deploy_model", json=deploy_payload_v1)
         self.assertEqual(response.status_code, 201)
-        self.assertIn("endpoint", json.loads(response.data))
+        self.assertIn("endpoint", response.get_json())
 
         # 3. Predição com modelo v1
-        predict_payload = {"feature_1": 0.7, "feature_2": 8}
+        predict_payload = {"features": [[0.7, 8]]}
         response = self.client.post(f"/predict/{self.model_v1.metadata.name}/{self.model_v1.metadata.version}", json=predict_payload)
         self.assertEqual(response.status_code, 200)
-        prediction_data = json.loads(response.data)
+        prediction_data = response.get_json()
         self.assertIn("prediction", prediction_data)
         self.assertEqual(prediction_data["model_version"], self.model_v1.metadata.version)
 
@@ -129,7 +129,7 @@ class TestMLOpsIntegration(unittest.TestCase):
         }
         response = self.client.post("/register_model", json=register_payload_v2)
         self.assertEqual(response.status_code, 201)
-        self.assertEqual(json.loads(response.data)["status"], "Model registered and promoted to STAGED")
+        self.assertEqual(response.get_json()["status"], "Model registered and promoted to STAGED")
 
         # 5. Deploy modelo v2 com estratégia Canary (deve manter v1 ativo e adicionar v2)
         deploy_payload_v2 = {
@@ -140,12 +140,12 @@ class TestMLOpsIntegration(unittest.TestCase):
         }
         response = self.client.post("/deploy_model", json=deploy_payload_v2)
         self.assertEqual(response.status_code, 201)
-        self.assertIn("endpoint", json.loads(response.data))
+        self.assertIn("endpoint", response.get_json())
 
         # Verificar que ambos os modelos estão implantados
         response = self.client.get("/deployments")
         self.assertEqual(response.status_code, 200)
-        deployments = json.loads(response.data)
+        deployments = response.get_json()
         self.assertEqual(len(deployments), 2)
         self.assertTrue(any(d["model_version"] == "1.0.0" for d in deployments))
         self.assertTrue(any(d["model_version"] == "2.0.0" for d in deployments))
@@ -157,12 +157,12 @@ class TestMLOpsIntegration(unittest.TestCase):
         }
         response = self.client.post("/undeploy_model", json=undeploy_payload)
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(json.loads(response.data)["status"], "Model undeployed")
+        self.assertEqual(response.get_json()["status"], "Model undeployed")
 
         # Verificar que apenas o modelo v2 está implantado
         response = self.client.get("/deployments")
         self.assertEqual(response.status_code, 200)
-        deployments = json.loads(response.data)
+        deployments = response.get_json()
         self.assertEqual(len(deployments), 1)
         self.assertEqual(deployments[0]["model_version"], "2.0.0")
 
