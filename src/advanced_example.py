@@ -1,4 +1,3 @@
-
 import os
 import pickle
 import numpy as np
@@ -14,20 +13,31 @@ import json
 import threading
 import time
 
+
 # --- 0. Preparação de Dados e Treinamento de Modelo Mais Complexo ---
 def prepare_and_train_model(model_dir):
     print("\n--- 0. Preparando Dados e Treinando Modelo de Exemplo Avançado ---")
     # Gerar dados sintéticos para um problema de classificação binária
     np.random.seed(42)
     data_size = 1000
-    features = pd.DataFrame({
-        'feature_1': np.random.rand(data_size) * 100,
-        'feature_2': np.random.rand(data_size) * 50,
-        'feature_3': np.random.randint(0, 2, data_size),
-        'feature_4': np.random.normal(50, 10, data_size)
-    })
+    features = pd.DataFrame(
+        {
+            "feature_1": np.random.rand(data_size) * 100,
+            "feature_2": np.random.rand(data_size) * 50,
+            "feature_3": np.random.randint(0, 2, data_size),
+            "feature_4": np.random.normal(50, 10, data_size),
+        }
+    )
     # Criar uma target mais complexa
-    target = ((features['feature_1'] * 0.5 + features['feature_2'] * 0.8 + features['feature_3'] * 10 + features['feature_4'] * 0.2) > 100).astype(int)
+    target = (
+        (
+            features["feature_1"] * 0.5
+            + features["feature_2"] * 0.8
+            + features["feature_3"] * 10
+            + features["feature_4"] * 0.2
+        )
+        > 100
+    ).astype(int)
 
     X_train, X_test, y_train, y_test = train_test_split(features, target, test_size=0.2, random_state=42)
 
@@ -67,13 +77,14 @@ def run_advanced_example():
     if os.path.exists("model_deployments.json"):
         os.remove("model_deployments.json")
 
-    model_path, accuracy, precision, recall, sample_input, X_train, y_train, X_test, y_test = prepare_and_train_model(model_dir)
-
+    model_path, accuracy, precision, recall, sample_input, X_train, y_train, X_test, y_test = prepare_and_train_model(
+        model_dir
+    )
 
     # --- 1. Inicializar Plataforma de Deployment ---
     print("\n--- 1. Inicializando Plataforma de Deployment ---")
     platform = DeploymentPlatform("production-platform")
-    
+
     # --- 2. Registrar Modelo ---
     print("\n--- 2. Registrando Modelo Avançado ---")
     metadata_v1 = ModelMetadata(
@@ -84,7 +95,7 @@ def run_advanced_example():
         description="Modelo avançado para predição de churn de clientes (RandomForest)",
         metrics={"accuracy": accuracy, "precision": precision, "recall": recall},
         tags=["classification", "churn", "advanced", "production"],
-        model_path=model_path
+        model_path=model_path,
     )
     model_v1 = Model(metadata_v1)
     platform.registry.register_model(model_v1)
@@ -100,28 +111,28 @@ def run_advanced_example():
     api_thread = threading.Thread(target=lambda: model_api_app.run(port=5001, debug=False, use_reloader=False))
     api_thread.daemon = True
     api_thread.start()
-    time.sleep(3) # Dar um tempo para a API iniciar
+    time.sleep(3)  # Dar um tempo para a API iniciar
     print("  API de serviço de modelos iniciada em http://127.0.0.1:5001")
 
     # --- 5. Realizar Deployment (Blue/Green) ---
     print("\n--- 5. Realizando Deployment Blue/Green para v1.0.0 ---")
-    config_v1 = DeploymentConfig(
-        strategy=DeploymentStrategy.BLUE_GREEN,
-        replicas=2,
-        auto_scaling=True
-    )
+    config_v1 = DeploymentConfig(strategy=DeploymentStrategy.BLUE_GREEN, replicas=2, auto_scaling=True)
     endpoint_v1 = platform.deploy_model(model_v1, config_v1)
     if endpoint_v1:
-        print(f"  Deployment de {model_v1.metadata.name} v{model_v1.metadata.version} concluído. Endpoint: {endpoint_v1}")
+        print(
+            f"  Deployment de {model_v1.metadata.name} v{model_v1.metadata.version} concluído. Endpoint: {endpoint_v1}"
+        )
     else:
         print(f"  Falha no deployment do modelo {model_v1.metadata.name} v{model_v1.metadata.version}.")
         return
 
     # --- 6. Realizar Previsão via API ---
     print("\n--- 6. Realizando Previsão com o Modelo Implantado (v1.0.0) ---")
-    input_data = {"features": [list(sample_input.values())]} # Usar um exemplo real do X_test
+    input_data = {"features": [list(sample_input.values())]}  # Usar um exemplo real do X_test
     try:
-        response = requests.post(f"http://127.0.0.1:5001/predict/{model_v1.metadata.name}/{model_v1.metadata.version}", json=input_data)
+        response = requests.post(
+            f"http://127.0.0.1:5001/predict/{model_v1.metadata.name}/{model_v1.metadata.version}", json=input_data
+        )
         response.raise_for_status()
         prediction_result = response.json()
         print(f"  Resultado da previsão (v1.0.0): {prediction_result}")
@@ -133,7 +144,9 @@ def run_advanced_example():
     # --- 7. Simular uma Nova Versão do Modelo (v2.0.0) e Canary Release ---
     print("\n--- 7. Simular uma Nova Versão do Modelo (v2.0.0) e Canary Release ---")
     # Treinar uma nova versão do modelo (simulando melhorias)
-    advanced_model_v2 = RandomForestClassifier(n_estimators=120, random_state=42, max_depth=10) # Modelo ligeiramente diferente
+    advanced_model_v2 = RandomForestClassifier(
+        n_estimators=120, random_state=42, max_depth=10
+    )  # Modelo ligeiramente diferente
     advanced_model_v2.fit(X_train, y_train)
     y_pred_v2 = advanced_model_v2.predict(X_test)
     accuracy_v2 = accuracy_score(y_test, y_pred_v2)
@@ -154,7 +167,7 @@ def run_advanced_example():
         description="Modelo avançado para predição de churn de clientes (RandomForest v2 - otimizado)",
         metrics={"accuracy": accuracy_v2, "precision": precision_v2, "recall": recall_v2},
         tags=["classification", "churn", "advanced", "production", "canary"],
-        model_path=model_path_v2
+        model_path=model_path_v2,
     )
     model_v2 = Model(metadata_v2)
     platform.registry.register_model(model_v2)
@@ -164,19 +177,23 @@ def run_advanced_example():
         strategy=DeploymentStrategy.CANARY,
         replicas=1,
         auto_scaling=False,
-        canary_traffic_percentage=20 # 20% do tráfego para a nova versão
+        canary_traffic_percentage=20,  # 20% do tráfego para a nova versão
     )
     # Verificar se já existe um deployment ativo para model_v2
     existing_deployment_v2 = platform.deployments.get(f"{model_v2.metadata.name}-{model_v2.metadata.version}")
     if not existing_deployment_v2:
         endpoint_v2 = platform.deploy_model(model_v2, config_v2)
         if endpoint_v2:
-            print(f"  Deployment Canary de {model_v2.metadata.name} v{model_v2.metadata.version} concluído. Endpoint: {endpoint_v2}")
+            print(
+                f"  Deployment Canary de {model_v2.metadata.name} v{model_v2.metadata.version} concluído. Endpoint: {endpoint_v2}"
+            )
         else:
             print(f"  Falha no deployment Canary do modelo {model_v2.metadata.name} v{model_v2.metadata.version}.")
             return
     else:
-        print(f"  Modelo {model_v2.metadata.name} v{model_v2.metadata.version} já possui um deployment ativo. Reutilizando.")
+        print(
+            f"  Modelo {model_v2.metadata.name} v{model_v2.metadata.version} já possui um deployment ativo. Reutilizando."
+        )
         endpoint_v2 = existing_deployment_v2["endpoint"]
 
     # --- 8. Simular Tráfego para Canary Release ---
@@ -213,7 +230,9 @@ def run_advanced_example():
     # --- 10. Realizar Previsão com o Modelo v2.0.0 em Produção ---
     print("\n--- 10. Realizando Previsão com o Modelo Implantado (v2.0.0) ---")
     try:
-        response = requests.post(f"http://127.0.0.1:5001/predict/{model_v2.metadata.name}/{model_v2.metadata.version}", json=input_data)
+        response = requests.post(
+            f"http://127.0.0.1:5001/predict/{model_v2.metadata.name}/{model_v2.metadata.version}", json=input_data
+        )
         response.raise_for_status()
         prediction_result = response.json()
         print(f"  Resultado da previsão (v2.0.0): {prediction_result}")
@@ -231,6 +250,6 @@ def run_advanced_example():
     print("Demonstração do Exemplo Avançado Concluída.")
     print("==================================================")
 
+
 if __name__ == "__main__":
     run_advanced_example()
-

@@ -133,6 +133,7 @@ test_model_registry.json
 test_model_deployments.json
 test_model_registry_integration.json
 test_model_deployments_integration.json
+example_registry.json
 
 # Temporary files
 *.log

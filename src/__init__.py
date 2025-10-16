@@ -13,17 +13,17 @@ from .model_deployment import (
     ModelRegistry,
     ModelStatus,
     DeploymentStrategy,
-    DeploymentConfig
+    DeploymentConfig,
 )
 
 __all__ = [
-    'DeploymentPlatform',
-    'Model',
-    'ModelMetadata',
-    'ModelRegistry',
-    'ModelStatus',
-    'DeploymentStrategy',
-    'DeploymentConfig'
+    "DeploymentPlatform",
+    "Model",
+    "ModelMetadata",
+    "ModelRegistry",
+    "ModelStatus",
+    "DeploymentStrategy",
+    "DeploymentConfig",
 ]
 
-__version__ = '1.0.0'
+__version__ = "1.0.0"

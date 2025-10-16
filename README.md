@@ -4,11 +4,10 @@
 ![Flask](https://img.shields.io/badge/Flask-2.3.x-black?style=for-the-badge&logo=flask&logoColor=white)
 ![Docker](https://img.shields.io/badge/Container-Docker-blue?style=for-the-badge&logo=docker&logoColor=white)
 ![Kubernetes](https://img.shields.io/badge/Orchestration-Kubernetes-blue?style=for-the-badge&logo=kubernetes&logoColor=white)
-![Mermaid](https://img.shields.io/badge/Diagrams-Mermaid-orange?style=for-the-badge&logo=mermaid&logoColor=white)
 ![License](https://img.shields.io/badge/License-MIT-green.svg?style=for-the-badge)
-![GitHub Actions](https://github.com/galafis/mlops-model-deployment-platform/workflows/CI/badge.svg)
+[![CI](https://github.com/galafis/mlops-model-deployment-platform/actions/workflows/ci.yml/badge.svg)](https://github.com/galafis/mlops-model-deployment-platform/actions/workflows/ci.yml)
 ![Code Style: Black](https://img.shields.io/badge/code%20style-black-000000.svg)
-![PyPI - Python Version](https://img.shields.io/pypi/pyversions/scikit-learn)
+![Tests](https://img.shields.io/badge/tests-14%20passed-success)
 
 ---
 
