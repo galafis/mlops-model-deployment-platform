@@ -5,9 +5,7 @@
 ![Docker](https://img.shields.io/badge/Container-Docker-blue?style=for-the-badge&logo=docker&logoColor=white)
 ![Kubernetes](https://img.shields.io/badge/Orchestration-Kubernetes-blue?style=for-the-badge&logo=kubernetes&logoColor=white)
 ![License](https://img.shields.io/badge/License-MIT-green.svg?style=for-the-badge)
-[![CI](https://github.com/galafis/mlops-model-deployment-platform/actions/workflows/ci.yml/badge.svg)](https://github.com/galafis/mlops-model-deployment-platform/actions/workflows/ci.yml)
 ![Code Style: Black](https://img.shields.io/badge/code%20style-black-000000.svg)
-![Tests](https://img.shields.io/badge/tests-14%20passed-success)
 
 ---
 
