@@ -94,7 +94,7 @@ git push origin feature/your-feature-name
 
 2. Create a Pull Request on GitHub
 
-3. Ensure all CI checks pass
+3. Ensure all tests pass locally
 
 4. Wait for code review and address any feedback
 

@@ -100,13 +100,14 @@ mlops-model-deployment-platform/
 │   ├── model_deployment.py      # Lógica principal da plataforma de deployment
 │   ├── model_serving_api.py     # Implementação da API Flask para inferência
 │   └── advanced_example.py      # Módulo de exemplo avançado com treinamento e deploy
-├── data/                        # Dados de exemplo e modelos pré-treinados
-├── images/                      # Imagens e diagramas para o README e documentação
 ├── tests/                       # Testes unitários e de integração
-├── docs/                        # Documentação adicional, guias e whitepapers sobre MLOps
-├── config/                      # Arquivos de configuração (ex: para ambiente de deploy)
-├── models/                      # Diretório para armazenar modelos versionados
+├── examples/                    # Exemplos de uso da plataforma
+├── diagrams/                    # Diagramas de arquitetura (Mermaid)
+├── images/                      # Imagens para o README e documentação
+├── API_DOCUMENTATION.md         # Documentação detalhada da API REST e Python
+├── CONTRIBUTING.md              # Guia de contribuição
 ├── requirements.txt             # Dependências Python
+├── setup.py                     # Script de instalação do pacote
 └── README.md                    # Este arquivo
 ```
 
@@ -114,7 +115,7 @@ mlops-model-deployment-platform/
 
 ## 🚀 Getting Started
 
-Para começar, clone o repositório e explore os diretórios `src/` e `docs/` para exemplos detalhados e instruções de uso. Certifique-se de ter as dependências necessárias instaladas.
+Para começar, clone o repositório e explore os diretórios `src/` e `examples/` para exemplos detalhados e instruções de uso. Certifique-se de ter as dependências necessárias instaladas.
 
 ### Pré-requisitos
 
