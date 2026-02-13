@@ -1,343 +1,255 @@
-# 🤖 Mlops Model Deployment Platform
+# MLOps Model Deployment Platform
 
-> MLOps platform for end-to-end model lifecycle management. Handles versioning, A/B testing, canary deployments, monitoring, and automated retraining.
+Plataforma para gerenciamento de ciclo de vida de modelos de ML com persistencia JSON e API Flask.
 
-[![Python](https://img.shields.io/badge/Python-3.12-3776AB.svg)](https://img.shields.io/badge/)
-[![Flask](https://img.shields.io/badge/Flask-3.0-000000.svg)](https://img.shields.io/badge/)
-[![Gin](https://img.shields.io/badge/Gin-1.9-00ADD8.svg)](https://img.shields.io/badge/)
-[![Pandas](https://img.shields.io/badge/Pandas-2.2-150458.svg)](https://img.shields.io/badge/)
-[![scikit--learn](https://img.shields.io/badge/scikit--learn-1.4-F7931E.svg)](https://img.shields.io/badge/)
+[![Python](https://img.shields.io/badge/Python-3.12-3776AB.svg)](https://python.org)
+[![Flask](https://img.shields.io/badge/Flask-3.0-000000.svg)](https://flask.palletsprojects.com)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-[English](#english) | [Português](#português)
+[English](#english) | [Portugues](#portugues)
+
+---
+
+## Portugues
+
+### Visao Geral
+
+Plataforma de deployment de modelos de Machine Learning que gerencia o ciclo de vida completo: registro, versionamento, promocao (training -> staged -> production -> archived), deployment simulado com estrategias (blue/green, canary, rolling, shadow), e API REST para inferencia.
+
+Os dados sao persistidos em arquivos JSON locais (`model_registry.json`, `model_deployments.json`). O deployment e simulado — gera URLs de endpoint ficticias, sem provisionamento real de infraestrutura.
+
+### Arquitetura
+
+```mermaid
+graph TB
+    subgraph API["API Flask"]
+        A["/register_model (POST)"]
+        B["/deploy_model (POST)"]
+        C["/predict (POST)"]
+        D["/models (GET)"]
+        E["/deployments (GET)"]
+        F["/undeploy_model (POST)"]
+    end
+
+    subgraph Core["Nucleo"]
+        G[DeploymentPlatform]
+        H[ModelRegistry]
+        I[Model]
+        J[ModelMetadata]
+        K[DeploymentConfig]
+    end
+
+    subgraph Persistencia["Persistencia"]
+        L[(model_registry.json)]
+        M[(model_deployments.json)]
+    end
+
+    API --> G
+    G --> H
+    H --> I
+    I --> J
+    G --> K
+    H --> L
+    G --> M
+```
+
+### Funcionalidades
+
+- **Registro de modelos** com metadados (nome, versao, framework, autor, metricas)
+- **Versionamento** — multiplas versoes do mesmo modelo
+- **Ciclo de vida** — transicoes: TRAINING -> STAGED -> PRODUCTION -> ARCHIVED
+- **Estrategias de deployment** — Blue/Green, Canary (com % de trafego), Rolling, Shadow
+- **Persistencia JSON** — registro e deployments salvos em disco
+- **API REST Flask** — endpoints para CRUD de modelos e inferencia
+- **Predicao mock** — se nenhum modelo real (pickle) for carregado, retorna predicao simulada
+- **Predicao real** — carrega modelos pickle (sklearn, etc.) e chama `.predict()`
+
+### Como Executar
+
+```bash
+# Instalar dependencias
+pip install -r requirements.txt
+
+# Usar programaticamente
+python -c "
+from src.model_deployment import DeploymentPlatform, ModelMetadata, Model, DeploymentConfig, DeploymentStrategy
+
+platform = DeploymentPlatform('minha-plataforma')
+metadata = ModelMetadata(name='meu-modelo', version='1.0.0', framework='sklearn', author='eu', description='teste')
+model = Model(metadata)
+platform.registry.register_model(model)
+model.promote_to_staging()
+model.promote_to_production()
+endpoint = platform.deploy_model(model, DeploymentConfig(strategy=DeploymentStrategy.BLUE_GREEN))
+print(f'Endpoint: {endpoint}')
+"
+
+# Iniciar API Flask
+python -c "
+from src.model_deployment import DeploymentPlatform
+platform = DeploymentPlatform('api-platform')
+app = platform.create_flask_api()
+app.run(host='0.0.0.0', port=5001)
+"
+
+# Executar exemplo avancado (requer: pip install pandas scikit-learn requests numpy)
+python examples/advanced_example.py
+
+# Executar testes
+pytest tests/ -v
+```
+
+### Estrutura do Projeto
+
+```
+mlops-model-deployment-platform/
+├── src/
+│   ├── __init__.py
+│   └── model_deployment.py    # Modulo principal (~709 linhas)
+├── tests/
+│   ├── test_model_deployment.py  # 13 testes unitarios
+│   └── test_integration.py       # 2 testes de integracao
+├── examples/
+│   ├── simple_example.py         # Exemplo basico
+│   ├── advanced_example.py       # Exemplo com sklearn + API
+│   └── README.md
+├── LICENSE
+├── README.md
+├── requirements.txt
+└── setup.py
+```
+
+### Tecnologias
+
+| Tecnologia | Uso |
+|------------|-----|
+| Python | Linguagem principal |
+| Flask | API REST |
+| JSON | Persistencia de dados |
+| pickle | Carregamento de modelos serializados |
 
 ---
 
 ## English
 
-### 🎯 Overview
+### Overview
 
-**Mlops Model Deployment Platform** is a production-grade Python application that showcases modern software engineering practices including clean architecture, comprehensive testing, containerized deployment, and CI/CD readiness.
+Machine Learning model deployment platform that manages the full lifecycle: registration, versioning, promotion (training -> staged -> production -> archived), simulated deployment with strategies (blue/green, canary, rolling, shadow), and REST API for inference.
 
-The codebase comprises **1,768 lines** of source code organized across **8 modules**, following industry best practices for maintainability, scalability, and code quality.
+Data is persisted in local JSON files (`model_registry.json`, `model_deployments.json`). Deployment is simulated — generates fake endpoint URLs without actual infrastructure provisioning.
 
-### ✨ Key Features
-
-- **🤖 ML Pipeline**: End-to-end machine learning workflow from data to deployment
-- **🔬 Feature Engineering**: Automated feature extraction and transformation
-- **📊 Model Evaluation**: Comprehensive metrics and cross-validation
-- **🚀 Model Serving**: Production-ready prediction API
-- **🏗️ Object-Oriented**: 9 core classes with clean architecture
-
-### 🏗️ Architecture
+### Architecture
 
 ```mermaid
 graph TB
-    subgraph Client["🖥️ Client Layer"]
-        A[REST API Client]
-        B[Swagger UI]
+    subgraph API["Flask API"]
+        A["/register_model (POST)"]
+        B["/deploy_model (POST)"]
+        C["/predict (POST)"]
+        D["/models (GET)"]
+        E["/deployments (GET)"]
+        F["/undeploy_model (POST)"]
     end
-    
-    subgraph API["⚡ API Layer"]
-        C[Authentication & Rate Limiting]
-        D[Request Validation]
-        E[API Endpoints]
+
+    subgraph Core["Core"]
+        G[DeploymentPlatform]
+        H[ModelRegistry]
+        I[Model]
+        J[ModelMetadata]
+        K[DeploymentConfig]
     end
-    
-    subgraph ML["🤖 ML Engine"]
-        F[Feature Engineering]
-        G[Model Training]
-        H[Prediction Service]
-        I[Model Registry]
+
+    subgraph Storage["Storage"]
+        L[(model_registry.json)]
+        M[(model_deployments.json)]
     end
-    
-    subgraph Data["💾 Data Layer"]
-        J[(Database)]
-        K[Cache Layer]
-        L[Data Pipeline]
-    end
-    
-    A --> C
-    B --> C
-    C --> D --> E
-    E --> H
-    E --> J
-    H --> F --> G
-    G --> I
-    I --> H
-    E --> K
-    L --> J
-    
-    style Client fill:#e1f5fe
-    style API fill:#f3e5f5
-    style ML fill:#e8f5e9
-    style Data fill:#fff3e0
+
+    API --> G
+    G --> H
+    H --> I
+    I --> J
+    G --> K
+    H --> L
+    G --> M
 ```
 
-```mermaid
-classDiagram
-    class DeploymentStrategy
-    class ModelStatus
-    class MockFlaskClient
-    class ModelMetadata
-    class MockResponse
-    class Model
-    class DeploymentConfig
-```
+### Features
 
-### 🚀 Quick Start
+- **Model registration** with metadata (name, version, framework, author, metrics)
+- **Versioning** — multiple versions of the same model
+- **Lifecycle management** — transitions: TRAINING -> STAGED -> PRODUCTION -> ARCHIVED
+- **Deployment strategies** — Blue/Green, Canary (with traffic %), Rolling, Shadow
+- **JSON persistence** — registry and deployments saved to disk
+- **Flask REST API** — endpoints for model CRUD and inference
+- **Mock prediction** — if no real model (pickle) is loaded, returns simulated prediction
+- **Real prediction** — loads pickle models (sklearn, etc.) and calls `.predict()`
 
-#### Prerequisites
-
-- Python 3.12+
-- pip (Python package manager)
-
-#### Installation
+### How to Run
 
 ```bash
-# Clone the repository
-git clone https://github.com/galafis/mlops-model-deployment-platform.git
-cd mlops-model-deployment-platform
-
-# Create and activate virtual environment
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-
 # Install dependencies
 pip install -r requirements.txt
+
+# Use programmatically
+python -c "
+from src.model_deployment import DeploymentPlatform, ModelMetadata, Model, DeploymentConfig, DeploymentStrategy
+
+platform = DeploymentPlatform('my-platform')
+metadata = ModelMetadata(name='my-model', version='1.0.0', framework='sklearn', author='me', description='test')
+model = Model(metadata)
+platform.registry.register_model(model)
+model.promote_to_staging()
+model.promote_to_production()
+endpoint = platform.deploy_model(model, DeploymentConfig(strategy=DeploymentStrategy.BLUE_GREEN))
+print(f'Endpoint: {endpoint}')
+"
+
+# Start Flask API
+python -c "
+from src.model_deployment import DeploymentPlatform
+platform = DeploymentPlatform('api-platform')
+app = platform.create_flask_api()
+app.run(host='0.0.0.0', port=5001)
+"
+
+# Run advanced example (requires: pip install pandas scikit-learn requests numpy)
+python examples/advanced_example.py
+
+# Run tests
+pytest tests/ -v
 ```
 
-#### Running
-
-```bash
-# Run the application
-python src/main.py
-```
-
-### 🧪 Testing
-
-```bash
-# Run all tests
-pytest
-
-# Run with coverage report
-pytest --cov --cov-report=html
-
-# Run specific test module
-pytest tests/test_main.py -v
-
-# Run with detailed output
-pytest -v --tb=short
-```
-
-### 📁 Project Structure
+### Project Structure
 
 ```
 mlops-model-deployment-platform/
-├── diagrams/
-├── examples/
-│   ├── README.md
-│   └── simple_example.py
-├── images/
-├── src/          # Source code
+├── src/
 │   ├── __init__.py
-│   ├── advanced_example.py
-│   ├── model_deployment.py
-│   └── model_serving_api.py
-├── tests/         # Test suite
-│   ├── test_integration.py
-│   └── test_model_deployment.py
-├── API_DOCUMENTATION.md
-├── CONTRIBUTING.md
+│   └── model_deployment.py    # Main module (~709 lines)
+├── tests/
+│   ├── test_model_deployment.py  # 13 unit tests
+│   └── test_integration.py       # 2 integration tests
+├── examples/
+│   ├── simple_example.py         # Basic example
+│   ├── advanced_example.py       # Example with sklearn + API
+│   └── README.md
 ├── LICENSE
 ├── README.md
 ├── requirements.txt
 └── setup.py
 ```
 
-### 🛠️ Tech Stack
+### Technologies
 
-| Technology | Description | Role |
-|------------|-------------|------|
-| **Python** | Core Language | Primary |
-| **Flask** | Lightweight web framework | Framework |
-| **Gin** | Go web framework | Framework |
-| **Pandas** | Data manipulation library | Framework |
-| **scikit-learn** | Machine learning library | Framework |
-
-### 🤝 Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request. For major changes, please open an issue first to discuss what you would like to change.
-
-1. Fork the project
-2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
-4. Push to the branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
-
-### 📄 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-### 👤 Author
-
-**Gabriel Demetrios Lafis**
-- GitHub: [@galafis](https://github.com/galafis)
-- LinkedIn: [Gabriel Demetrios Lafis](https://linkedin.com/in/gabriel-demetrios-lafis)
+| Technology | Usage |
+|------------|-------|
+| Python | Core language |
+| Flask | REST API |
+| JSON | Data persistence |
+| pickle | Serialized model loading |
 
 ---
 
-## Português
-
-### 🎯 Visão Geral
-
-**Mlops Model Deployment Platform** é uma aplicação Python de nível profissional que demonstra práticas modernas de engenharia de software, incluindo arquitetura limpa, testes abrangentes, implantação containerizada e prontidão para CI/CD.
-
-A base de código compreende **1,768 linhas** de código-fonte organizadas em **8 módulos**, seguindo as melhores práticas do setor para manutenibilidade, escalabilidade e qualidade de código.
-
-### ✨ Funcionalidades Principais
-
-- **🤖 ML Pipeline**: End-to-end machine learning workflow from data to deployment
-- **🔬 Feature Engineering**: Automated feature extraction and transformation
-- **📊 Model Evaluation**: Comprehensive metrics and cross-validation
-- **🚀 Model Serving**: Production-ready prediction API
-- **🏗️ Object-Oriented**: 9 core classes with clean architecture
-
-### 🏗️ Arquitetura
-
-```mermaid
-graph TB
-    subgraph Client["🖥️ Client Layer"]
-        A[REST API Client]
-        B[Swagger UI]
-    end
-    
-    subgraph API["⚡ API Layer"]
-        C[Authentication & Rate Limiting]
-        D[Request Validation]
-        E[API Endpoints]
-    end
-    
-    subgraph ML["🤖 ML Engine"]
-        F[Feature Engineering]
-        G[Model Training]
-        H[Prediction Service]
-        I[Model Registry]
-    end
-    
-    subgraph Data["💾 Data Layer"]
-        J[(Database)]
-        K[Cache Layer]
-        L[Data Pipeline]
-    end
-    
-    A --> C
-    B --> C
-    C --> D --> E
-    E --> H
-    E --> J
-    H --> F --> G
-    G --> I
-    I --> H
-    E --> K
-    L --> J
-    
-    style Client fill:#e1f5fe
-    style API fill:#f3e5f5
-    style ML fill:#e8f5e9
-    style Data fill:#fff3e0
-```
-
-### 🚀 Início Rápido
-
-#### Prerequisites
-
-- Python 3.12+
-- pip (Python package manager)
-
-#### Installation
-
-```bash
-# Clone the repository
-git clone https://github.com/galafis/mlops-model-deployment-platform.git
-cd mlops-model-deployment-platform
-
-# Create and activate virtual environment
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-
-# Install dependencies
-pip install -r requirements.txt
-```
-
-#### Running
-
-```bash
-# Run the application
-python src/main.py
-```
-
-### 🧪 Testing
-
-```bash
-# Run all tests
-pytest
-
-# Run with coverage report
-pytest --cov --cov-report=html
-
-# Run specific test module
-pytest tests/test_main.py -v
-
-# Run with detailed output
-pytest -v --tb=short
-```
-
-### 📁 Estrutura do Projeto
-
-```
-mlops-model-deployment-platform/
-├── diagrams/
-├── examples/
-│   ├── README.md
-│   └── simple_example.py
-├── images/
-├── src/          # Source code
-│   ├── __init__.py
-│   ├── advanced_example.py
-│   ├── model_deployment.py
-│   └── model_serving_api.py
-├── tests/         # Test suite
-│   ├── test_integration.py
-│   └── test_model_deployment.py
-├── API_DOCUMENTATION.md
-├── CONTRIBUTING.md
-├── LICENSE
-├── README.md
-├── requirements.txt
-└── setup.py
-```
-
-### 🛠️ Stack Tecnológica
-
-| Tecnologia | Descrição | Papel |
-|------------|-----------|-------|
-| **Python** | Core Language | Primary |
-| **Flask** | Lightweight web framework | Framework |
-| **Gin** | Go web framework | Framework |
-| **Pandas** | Data manipulation library | Framework |
-| **scikit-learn** | Machine learning library | Framework |
-
-### 🤝 Contribuindo
-
-Contribuições são bem-vindas! Sinta-se à vontade para enviar um Pull Request.
-
-### 📄 Licença
-
-Este projeto está licenciado sob a Licença MIT - veja o arquivo [LICENSE](LICENSE) para detalhes.
-
-### 👤 Autor
-
-**Gabriel Demetrios Lafis**
+**Autor / Author:** Gabriel Demetrios Lafis
 - GitHub: [@galafis](https://github.com/galafis)
 - LinkedIn: [Gabriel Demetrios Lafis](https://linkedin.com/in/gabriel-demetrios-lafis)

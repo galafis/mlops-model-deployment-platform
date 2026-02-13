@@ -71,6 +71,7 @@ class ModelMetadata:
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]):
+        data = data.copy()
         data["created_at"] = datetime.fromisoformat(data["created_at"])
         return cls(**data)
 
@@ -104,6 +105,7 @@ class DeploymentConfig:
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]):
+        data = data.copy()
         data["strategy"] = DeploymentStrategy(data["strategy"])
         data.setdefault("canary_traffic_percentage", None)
         return cls(**data)
@@ -524,7 +526,8 @@ class DeploymentPlatform:
         print(f"  Promovendo canary {model.metadata.name} v{model.metadata.version} para produção completa...")
         # Simula a atualização da configuração de tráfego para 100%
         current_deployment["config"].canary_traffic_percentage = 100
-        current_deployment["config"].strategy = DeploymentStrategy.BLUE_GREEN  # Ou PRODUCTION_ROLLOUT
+        # Canary promoted to full production — keep as production rollout
+        current_deployment["status"] = "production"
         model.promote_to_production()  # Promove o modelo no registro para PRODUCTION
         self.registry._save_registry()  # Salva o registro após a promoção do modelo
         self._save_deployments()
