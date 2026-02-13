@@ -7,7 +7,6 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import accuracy_score, precision_score, recall_score
 
 from src.model_deployment import DeploymentPlatform, ModelMetadata, Model, DeploymentConfig, DeploymentStrategy
-from src.model_serving_api import app as model_api_app
 import requests
 import json
 import threading
@@ -108,7 +107,8 @@ def run_advanced_example():
 
     # --- 4. Iniciar API de Serviço de Modelos (em thread separada) ---
     print("\n--- 4. Iniciando API de Serviço de Modelos ---")
-    api_thread = threading.Thread(target=lambda: model_api_app.run(port=5001, debug=False, use_reloader=False))
+    api_app = platform.create_flask_api()
+    api_thread = threading.Thread(target=lambda: api_app.run(port=5001, debug=False, use_reloader=False))
     api_thread.daemon = True
     api_thread.start()
     time.sleep(3)  # Dar um tempo para a API iniciar

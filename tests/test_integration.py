@@ -3,7 +3,6 @@ import sys
 import os
 from datetime import datetime
 import json
-import shutil
 
 # Adicionar o diretório src ao path para importar os módulos
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
@@ -17,29 +16,6 @@ from model_deployment import (
     DeploymentConfig,
     ModelRegistry,
 )
-
-
-# Mock Flask para testes de API
-class MockFlaskClient:
-    def __init__(self, app):
-        self.app = app
-
-    def get(self, path):
-        with self.app.test_request_context(path):
-            response = self.app.dispatch_request()
-            return MockResponse(response)
-
-    def post(self, path, json=None):
-        with self.app.test_request_context(path, method="POST", json=json):
-            response = self.app.dispatch_request()
-            return MockResponse(response)
-
-
-class MockResponse:
-    def __init__(self, response):
-        self.response = response
-        self.status_code = response.status_code
-        self.data = response.get_data()
 
 
 class TestMLOpsIntegration(unittest.TestCase):
